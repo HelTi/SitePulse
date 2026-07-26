@@ -45,6 +45,12 @@ npm run build
 
 修改源码后重新构建，并在扩展管理页点击刷新按钮。
 
+## 自动离线包
+
+每次向 GitHub 推送代码时，`Build offline extension package` Workflow 会依次执行格式检查、Lint、单元测试和生产构建。成功后可在对应 Actions 运行页面的 Artifacts 区域下载 `sitepulse-<commit-sha>`。
+
+下载的 Artifact 是一个以 `manifest.json` 为根目录的 ZIP。解压后可直接通过 Chrome 的“加载已解压的扩展程序”安装。GitHub 默认保留该产物 30 天，也可从 Actions 页面手动触发 Workflow 重新生成。
+
 ## 权限说明
 
 | 权限            | 用途                                                     |
