@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "常访",
-  "description": "记录你最常访问的网站，并生成仅保存在本地的访问排行榜。",
+  "name": "__MSG_extensionName__",
+  "description": "__MSG_extensionDescription__",
   "version": "1.0.0",
+  "default_locale": "zh_CN",
   "permissions": ["storage", "webNavigation", "tabs", "favicon"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_title": "常访",
+    "default_title": "__MSG_actionTitle__",
     "default_popup": "popup.html"
   },
   "options_page": "options.html",

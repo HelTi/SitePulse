@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "常访"
+  },
+  "extensionDescription": {
+    "message": "记录你最常访问的网站，并生成仅保存在本地的访问排行榜。"
+  },
+  "actionTitle": {
+    "message": "打开常访"
+  }
+}

@@ -11,6 +11,17 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatRelativeTime } from '../shared/date';
+import {
+  createTranslator,
+  formatNumber,
+  formatVisitCount,
+  resolveLocale,
+} from '../shared/i18n';
+import type {
+  MessageKey,
+  MessageReplacements,
+  Translator,
+} from '../shared/i18n';
 import { rankSites } from '../shared/ranking';
 import {
   deleteSiteStat,
@@ -18,8 +29,13 @@ import {
   getSiteStats,
   setSettings,
 } from '../shared/storage';
-import { STORAGE_KEYS } from '../shared/constants';
-import type { SiteVisitMap, SiteVisitStat } from '../shared/types';
+import { DEFAULT_SETTINGS, STORAGE_KEYS } from '../shared/constants';
+import type {
+  ExtensionSettings,
+  SiteVisitMap,
+  SiteVisitStat,
+  SupportedLocale,
+} from '../shared/types';
 
 function SiteIcon({ site }: { site: SiteVisitStat }) {
   const [failed, setFailed] = useState(false);
@@ -49,6 +65,8 @@ function SiteIcon({ site }: { site: SiteVisitStat }) {
 interface SiteRowProps {
   rank: number;
   site: SiteVisitStat;
+  locale: SupportedLocale;
+  t: Translator;
   menuOpen: boolean;
   onToggleMenu: () => void;
   onOpen: () => void;
@@ -59,6 +77,8 @@ interface SiteRowProps {
 function SiteRow({
   rank,
   site,
+  locale,
+  t,
   menuOpen,
   onToggleMenu,
   onOpen,
@@ -71,7 +91,7 @@ function SiteRow({
         className="site-main"
         type="button"
         onClick={onOpen}
-        aria-label={`打开 ${site.title}`}
+        aria-label={t('openSiteLabel', { title: site.title })}
       >
         <span className={`rank ${rank <= 3 ? 'top' : ''}`}>{rank}</span>
         <SiteIcon site={site} />
@@ -79,15 +99,19 @@ function SiteRow({
           <span className="site-title">{site.title || site.hostname}</span>
           <span className="site-hostname">{site.hostname}</span>
           <span className="site-meta">
-            <strong>{site.visitCount.toLocaleString('zh-CN')} 次</strong>
-            <span>最近访问 {formatRelativeTime(site.lastVisitedAt)}</span>
+            <strong>{formatVisitCount(site.visitCount, locale)}</strong>
+            <span>
+              {t('recentlyVisited', {
+                time: formatRelativeTime(site.lastVisitedAt, locale),
+              })}
+            </span>
           </span>
         </span>
       </button>
       <button
         className="icon-button more-button"
         type="button"
-        aria-label={`更多 ${site.hostname}`}
+        aria-label={t('moreActionsLabel', { hostname: site.hostname })}
         aria-expanded={menuOpen}
         onClick={onToggleMenu}
       >
@@ -97,11 +121,11 @@ function SiteRow({
         <div className="menu" role="menu">
           <button type="button" role="menuitem" onClick={onOpen}>
             <ExternalLink size={14} />
-            打开网站
+            {t('menuOpenSite')}
           </button>
           <button type="button" role="menuitem" onClick={onExclude}>
             <Ban size={14} />
-            加入排除列表
+            {t('menuExcludeSite')}
           </button>
           <button
             className="danger"
@@ -110,7 +134,7 @@ function SiteRow({
             onClick={onDelete}
           >
             <Trash2 size={14} />
-            删除统计
+            {t('menuDeleteStats')}
           </button>
         </div>
       )}
@@ -120,36 +144,59 @@ function SiteRow({
 
 export function App() {
   const [siteStats, setSiteStats] = useState<SiteVisitMap>({});
+  const [settings, setLocalSettings] =
+    useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{
+    key: MessageKey;
+    replacements?: MessageReplacements;
+  } | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const locale = useMemo(
+    () => resolveLocale(settings.language),
+    [settings.language],
+  );
+  const t = useMemo(() => createTranslator(locale), [locale]);
 
-  const loadStats = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
-      setSiteStats(await getSiteStats());
-      setError('');
+      const [nextStats, nextSettings] = await Promise.all([
+        getSiteStats(),
+        getSettings(),
+      ]);
+      setSiteStats(nextStats);
+      setLocalSettings(nextSettings);
+      setError(null);
     } catch {
-      setError('暂时无法读取本地统计，请重新打开扩展。');
+      setError({ key: 'loadStatsError' });
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadStats();
+    void loadData();
     const handleStorageChange = (
       changes: Record<string, chrome.storage.StorageChange>,
       areaName: string,
     ) => {
-      if (areaName === 'local' && changes[STORAGE_KEYS.SITE_STATS]) {
-        void loadStats();
+      if (
+        areaName === 'local' &&
+        (changes[STORAGE_KEYS.SITE_STATS] || changes[STORAGE_KEYS.SETTINGS])
+      ) {
+        void loadData();
       }
     };
 
     chrome.storage.onChanged.addListener(handleStorageChange);
     return () => chrome.storage.onChanged.removeListener(handleStorageChange);
-  }, [loadStats]);
+  }, [loadData]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale === 'zh_CN' ? 'zh-CN' : 'en';
+    document.title = t('appName');
+  }, [locale, t]);
 
   const rankedSites = useMemo(
     () => rankSites(siteStats, { keyword }),
@@ -166,7 +213,10 @@ export function App() {
     try {
       await chrome.tabs.create({ url: site.lastUrl });
     } catch {
-      setError(`无法打开 ${site.hostname}`);
+      setError({
+        key: 'openSiteError',
+        replacements: { hostname: site.hostname },
+      });
     }
   };
 
@@ -181,7 +231,10 @@ export function App() {
       });
       setOpenMenu(null);
     } catch {
-      setError(`无法排除 ${hostname}`);
+      setError({
+        key: 'excludeSiteError',
+        replacements: { hostname },
+      });
     }
   };
 
@@ -189,7 +242,9 @@ export function App() {
     setOpenMenu(null);
     if (
       !window.confirm(
-        `确定删除 ${site.hostname} 的全部访问统计吗？\n\n之后再次访问会从 1 开始统计。`,
+        t('deleteConfirm', {
+          hostname: site.hostname,
+        }),
       )
     ) {
       return;
@@ -197,9 +252,12 @@ export function App() {
 
     try {
       await deleteSiteStat(site.hostname);
-      await loadStats();
+      await loadData();
     } catch {
-      setError(`无法删除 ${site.hostname} 的统计`);
+      setError({
+        key: 'deleteSiteError',
+        replacements: { hostname: site.hostname },
+      });
     }
   };
 
@@ -211,15 +269,15 @@ export function App() {
             <span className="brand-mark">
               <TrendingUp size={23} strokeWidth={2.4} />
             </span>
-            <div>
-              <h1>常访</h1>
-              <p>看看哪些网站，占据了你的日常</p>
+            <div className="brand-copy">
+              <h1>{t('appName')}</h1>
+              <p>{t('popupTagline')}</p>
             </div>
           </div>
           <button
             className="icon-button"
             type="button"
-            aria-label="打开设置"
+            aria-label={t('openSettings')}
             onClick={() => void chrome.runtime.openOptionsPage()}
           >
             <Settings size={19} />
@@ -231,36 +289,40 @@ export function App() {
           <input
             type="search"
             value={keyword}
-            placeholder="搜索网站名称或域名"
-            aria-label="搜索网站"
+            placeholder={t('searchPlaceholder')}
+            aria-label={t('searchAria')}
             onChange={(event) => setKeyword(event.target.value)}
           />
         </label>
 
-        <section className="summary" aria-label="访问统计摘要">
+        <section className="summary" aria-label={t('summaryAria')}>
           <span className="summary-item">
-            已记录网站 <strong>{siteCount.toLocaleString('zh-CN')}</strong>
+            {t('recordedSites')}{' '}
+            <strong>{formatNumber(siteCount, locale)}</strong>
           </span>
           <span className="summary-divider" aria-hidden="true" />
           <span className="summary-item">
-            累计访问 <strong>{totalVisits.toLocaleString('zh-CN')}</strong>
+            {t('totalVisits')}{' '}
+            <strong>{formatNumber(totalVisits, locale)}</strong>
           </span>
         </section>
       </header>
 
       {loading ? (
-        <div className="status-state">正在读取本地统计…</div>
+        <div className="status-state">{t('loadingStats')}</div>
       ) : error ? (
         <div className="status-state" role="alert">
-          {error}
+          {t(error.key, error.replacements)}
         </div>
       ) : rankedSites.length > 0 ? (
-        <section className="site-list" aria-label="常访网站排行榜">
+        <section className="site-list" aria-label={t('rankingAria')}>
           {rankedSites.map((site, index) => (
             <SiteRow
               key={site.hostname}
               rank={index + 1}
               site={site}
+              locale={locale}
+              t={t}
               menuOpen={openMenu === site.hostname}
               onToggleMenu={() =>
                 setOpenMenu((current) =>
@@ -279,19 +341,14 @@ export function App() {
             <span className="empty-state-icon">
               {keyword ? <Search size={25} /> : <Globe2 size={27} />}
             </span>
-            <h2>{keyword ? '没有找到匹配的网站' : '还没有访问记录'}</h2>
-            <p>
-              {keyword
-                ? '试试网站名称或域名中的其他关键词。'
-                : '打开几个网站后，这里会生成你的常访排行榜。'}
-            </p>
+            <h2>{keyword ? t('noSearchResults') : t('noVisitRecords')}</h2>
+            <p>{keyword ? t('searchHint') : t('emptyHint')}</p>
           </div>
         </section>
       )}
 
       <footer className="popup-footer">
-        <ShieldCheck size={11} aria-hidden="true" />{' '}
-        所有统计仅保存在本地，不会上传
+        <ShieldCheck size={11} aria-hidden="true" /> {t('privacyFooter')}
       </footer>
     </main>
   );

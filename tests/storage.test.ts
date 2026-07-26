@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearAllSiteStats,
+  getSettings,
   getSiteStats,
   initializeStorage,
 } from '../src/shared/storage';
@@ -57,11 +58,17 @@ describe('chrome storage helpers', () => {
     await initializeStorage();
 
     expect(stored.siteStats).toEqual({});
-    expect(stored.schemaVersion).toBe(1);
+    expect(stored.schemaVersion).toBe(2);
     expect(stored.settings).toEqual({
       trackingEnabled: false,
       excludedHostnames: ['internal.example.com'],
     });
+  });
+
+  it('defaults older settings to automatic language selection', async () => {
+    const settings = await getSettings();
+
+    expect(settings.language).toBe('auto');
   });
 
   it('repairs malformed records when reading', async () => {

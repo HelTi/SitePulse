@@ -1,29 +1,43 @@
 import {
   Database,
+  Languages,
   LockKeyhole,
   ShieldCheck,
   Trash2,
   TrendingUp,
 } from 'lucide-react';
-import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { clearAllSiteStats, getSettings, setSettings } from '../shared/storage';
-import type { ExtensionSettings } from '../shared/types';
-import { normalizeHostnameInput } from '../shared/url';
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { DEFAULT_SETTINGS } from '../shared/constants';
+import { createTranslator, resolveLocale } from '../shared/i18n';
+import type { MessageKey } from '../shared/i18n';
+import { clearAllSiteStats, getSettings, setSettings } from '../shared/storage';
+import type { ExtensionSettings, LanguagePreference } from '../shared/types';
+import { normalizeHostnameInput } from '../shared/url';
 
 export function App() {
   const [settings, setLocalSettings] =
     useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [input, setInput] = useState('');
-  const [inputError, setInputError] = useState('');
+  const [inputError, setInputError] = useState<MessageKey | null>(null);
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState<MessageKey | null>(null);
+  const locale = useMemo(
+    () => resolveLocale(settings.language),
+    [settings.language],
+  );
+  const t = useMemo(() => createTranslator(locale), [locale]);
 
   const loadSettings = useCallback(async () => {
     try {
       setLocalSettings(await getSettings());
     } catch {
-      setStatus('无法读取设置，请刷新页面重试。');
+      setStatus('loadSettingsError');
     } finally {
       setLoading(false);
     }
@@ -33,13 +47,18 @@ export function App() {
     void loadSettings();
   }, [loadSettings]);
 
+  useEffect(() => {
+    document.documentElement.lang = locale === 'zh_CN' ? 'zh-CN' : 'en';
+    document.title = t('optionsTitle');
+  }, [locale, t]);
+
   const persistSettings = async (nextSettings: ExtensionSettings) => {
     setLocalSettings(nextSettings);
     try {
       await setSettings(nextSettings);
-      setStatus('设置已保存');
+      setStatus('settingsSaved');
     } catch {
-      setStatus('设置保存失败，请重试。');
+      setStatus('settingsSaveError');
       await loadSettings();
     }
   };
@@ -48,17 +67,17 @@ export function App() {
     event.preventDefault();
     const hostname = normalizeHostnameInput(input);
     if (!hostname) {
-      setInputError('请输入有效域名或 HTTP/HTTPS 地址。');
+      setInputError('invalidDomain');
       return;
     }
 
     if (settings.excludedHostnames.includes(hostname)) {
-      setInputError('该域名已在排除列表中。');
+      setInputError('duplicateDomain');
       return;
     }
 
     setInput('');
-    setInputError('');
+    setInputError(null);
     void persistSettings({
       ...settings,
       excludedHostnames: [...settings.excludedHostnames, hostname].sort(),
@@ -75,19 +94,15 @@ export function App() {
   };
 
   const clearStats = async () => {
-    if (
-      !window.confirm(
-        '确定要清空所有访问统计吗？\n\n该操作无法撤销，排除列表不会被删除。',
-      )
-    ) {
+    if (!window.confirm(t('clearConfirm'))) {
       return;
     }
 
     try {
       await clearAllSiteStats();
-      setStatus('访问统计已清空，排除列表保持不变。');
+      setStatus('clearSuccess');
     } catch {
-      setStatus('清空失败，请重试。');
+      setStatus('clearError');
     }
   };
 
@@ -98,25 +113,50 @@ export function App() {
           <TrendingUp size={23} strokeWidth={2.4} />
         </span>
         <div>
-          <h1>常访设置</h1>
-          <p>控制统计范围与本地数据</p>
+          <h1>{t('optionsTitle')}</h1>
+          <p>{t('optionsSubtitle')}</p>
         </div>
       </header>
 
       {loading ? (
-        <div className="status-state">正在读取设置…</div>
+        <div className="status-state">{t('loadingSettings')}</div>
       ) : (
         <div className="settings-grid">
           <section className="settings-card setting-row">
             <div>
-              <h2>启用访问统计</h2>
-              <p>关闭后不再记录新访问，已有数据仍会保留。</p>
+              <h2>{t('languageTitle')}</h2>
+              <p>{t('languageDescription')}</p>
+            </div>
+            <div className="select-wrap">
+              <Languages size={17} aria-hidden="true" />
+              <select
+                className="select-input"
+                value={settings.language}
+                aria-label={t('languageAria')}
+                onChange={(event) =>
+                  void persistSettings({
+                    ...settings,
+                    language: event.target.value as LanguagePreference,
+                  })
+                }
+              >
+                <option value="auto">{t('languageAuto')}</option>
+                <option value="zh_CN">{t('languageChinese')}</option>
+                <option value="en">{t('languageEnglish')}</option>
+              </select>
+            </div>
+          </section>
+
+          <section className="settings-card setting-row">
+            <div>
+              <h2>{t('trackingTitle')}</h2>
+              <p>{t('trackingDescription')}</p>
             </div>
             <label className="switch">
               <input
                 type="checkbox"
                 checked={settings.trackingEnabled}
-                aria-label="启用访问统计"
+                aria-label={t('trackingAria')}
                 onChange={(event) =>
                   void persistSettings({
                     ...settings,
@@ -131,8 +171,8 @@ export function App() {
           <section className="settings-card">
             <div className="section-title-row">
               <div>
-                <h2>排除网站</h2>
-                <p>精确匹配域名；排除 example.com 不会排除子域名。</p>
+                <h2>{t('exclusionsTitle')}</h2>
+                <p>{t('exclusionsDescription')}</p>
               </div>
               <ShieldCheck size={21} color="#6254df" />
             </div>
@@ -140,20 +180,20 @@ export function App() {
               <input
                 className="text-input"
                 value={input}
-                placeholder="example.com 或 https://example.com/path"
-                aria-label="要排除的网站"
+                placeholder={t('exclusionPlaceholder')}
+                aria-label={t('exclusionAria')}
                 onChange={(event) => {
                   setInput(event.target.value);
-                  setInputError('');
+                  setInputError(null);
                 }}
               />
               <button className="primary-button" type="submit">
-                添加
+                {t('add')}
               </button>
             </form>
             {inputError && (
               <p className="field-error" role="alert">
-                {inputError}
+                {t(inputError)}
               </p>
             )}
             {settings.excludedHostnames.length > 0 ? (
@@ -163,7 +203,7 @@ export function App() {
                     <span>{hostname}</span>
                     <button
                       type="button"
-                      aria-label={`移除 ${hostname}`}
+                      aria-label={t('removeExclusion', { hostname })}
                       onClick={() => removeExclusion(hostname)}
                     >
                       <Trash2 size={15} />
@@ -172,46 +212,44 @@ export function App() {
                 ))}
               </div>
             ) : (
-              <p>当前没有排除的网站。</p>
+              <p>{t('noExclusions')}</p>
             )}
           </section>
 
           <section className="settings-card setting-row">
             <div>
-              <h2>清空统计数据</h2>
-              <p>删除全部访问次数，但不会删除排除列表和其他设置。</p>
+              <h2>{t('clearTitle')}</h2>
+              <p>{t('clearDescription')}</p>
             </div>
             <button
               className="danger-button"
               type="button"
               onClick={() => void clearStats()}
             >
-              清空统计
+              {t('clearButton')}
             </button>
           </section>
 
           <section className="settings-card privacy-note">
             <LockKeyhole size={22} />
             <div>
-              <h2>隐私说明</h2>
-              <p>
-                所有访问统计仅保存在你的浏览器本地，不会上传到任何服务器。常访不读取网页正文、输入内容或安装前的浏览历史。
-              </p>
+              <h2>{t('privacyTitle')}</h2>
+              <p>{t('privacyDescription')}</p>
             </div>
           </section>
 
           <section className="settings-card">
             <div className="about-line">
               <span>
-                <Database size={14} /> 本地存储 · Schema v1
+                <Database size={14} /> {t('localStorageLabel')}
               </span>
-              <span>常访 SitePulse · v1.0.0</span>
+              <span>{t('aboutLabel')}</span>
             </div>
           </section>
 
           {status && (
             <p className="about-line" role="status">
-              {status}
+              {t(status)}
             </p>
           )}
         </div>

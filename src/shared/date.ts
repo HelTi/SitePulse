@@ -1,13 +1,19 @@
-const relativeTime = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' });
+import { getIntlLocale } from './i18n';
+import type { SupportedLocale } from './types';
 
 export function formatRelativeTime(
   timestamp: number,
+  locale: SupportedLocale,
   now = Date.now(),
 ): string {
+  const intlLocale = getIntlLocale(locale);
+  const relativeTime = new Intl.RelativeTimeFormat(intlLocale, {
+    numeric: 'auto',
+  });
   const elapsedSeconds = Math.max(0, Math.floor((now - timestamp) / 1_000));
 
   if (elapsedSeconds < 60) {
-    return '刚刚';
+    return locale === 'zh_CN' ? '刚刚' : 'Just now';
   }
 
   const elapsedMinutes = Math.floor(elapsedSeconds / 60);
@@ -25,7 +31,7 @@ export function formatRelativeTime(
     return relativeTime.format(-elapsedDays, 'day');
   }
 
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(intlLocale, {
     month: 'short',
     day: 'numeric',
   }).format(timestamp);

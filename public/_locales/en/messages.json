@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "SitePulse"
+  },
+  "extensionDescription": {
+    "message": "Track your most visited websites and view a ranking stored only in your browser."
+  },
+  "actionTitle": {
+    "message": "Open SitePulse"
+  }
+}

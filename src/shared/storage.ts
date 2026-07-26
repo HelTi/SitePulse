@@ -101,6 +101,12 @@ function sanitizeSettings(value: unknown): ExtensionSettings {
         ? value.trackingEnabled
         : DEFAULT_SETTINGS.trackingEnabled,
     excludedHostnames,
+    language:
+      value.language === 'zh_CN' ||
+      value.language === 'en' ||
+      value.language === 'auto'
+        ? value.language
+        : DEFAULT_SETTINGS.language,
   };
 }
 

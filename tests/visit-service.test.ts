@@ -12,6 +12,7 @@ class MemoryStorage implements SiteStorage {
   public settings: ExtensionSettings = {
     trackingEnabled: true,
     excludedHostnames: [],
+    language: 'auto',
   };
 
   public async getSiteStats(): Promise<SiteVisitMap> {
@@ -108,6 +109,7 @@ describe('VisitService', () => {
     storage.settings = {
       trackingEnabled: true,
       excludedHostnames: ['example.com'],
+      language: 'auto',
     };
     await service.recordVisit({
       rawUrl: 'https://example.com',

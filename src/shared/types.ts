@@ -9,9 +9,13 @@ export interface SiteVisitStat {
 
 export type SiteVisitMap = Record<string, SiteVisitStat>;
 
+export type SupportedLocale = 'zh_CN' | 'en';
+export type LanguagePreference = 'auto' | SupportedLocale;
+
 export interface ExtensionSettings {
   trackingEnabled: boolean;
   excludedHostnames: string[];
+  language: LanguagePreference;
 }
 
 export interface LastNavigationRecord {
