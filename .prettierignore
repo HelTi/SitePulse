@@ -1,0 +1,4 @@
+dist
+coverage
+docs/prd.md
+public/icons/*.png
