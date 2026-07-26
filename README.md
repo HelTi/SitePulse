@@ -51,6 +51,17 @@ npm run build
 
 下载的 Artifact 是一个以 `manifest.json` 为根目录的 ZIP。解压后可直接通过 Chrome 的“加载已解压的扩展程序”安装。GitHub 默认保留该产物 30 天，也可从 Actions 页面手动触发 Workflow 重新生成。
 
+推送 `v1.0.0` 形式的 Tag 时，Workflow 还会自动创建 GitHub Release、生成发布说明，并上传 `sitepulse-v1.0.0.zip`。Release ZIP 不受普通 Artifact 的 30 天保留期限制。
+
+发布前需要保证 `package.json`、`public/manifest.json` 和 Tag 的版本一致：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+如果 Release 已存在，重新运行对应 Workflow 会覆盖同名 ZIP，不会重复创建 Release。
+
 ## 权限说明
 
 | 权限            | 用途                                                     |
